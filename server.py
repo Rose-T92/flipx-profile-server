@@ -20,7 +20,6 @@ HEADERS = {
     "X-Shopify-Access-Token": ADMIN_API_TOKEN,
 }
 
-
 def assign_profile_image_to_customer(customer_id, image_path):
     try:
         with open(image_path, "rb") as f:
@@ -57,55 +56,52 @@ def assign_profile_image_to_customer(customer_id, image_path):
             json=metafield_payload
         )
         metafield_response.raise_for_status()
-        print(f"✅ Profile image assigned to customer {customer_id}")
+        app.logger.info(f"✅ Profile image assigned to customer {customer_id}")
         return uploaded_url
 
     except Exception as e:
-        print(f"❌ Failed to assign image: {e}")
+        app.logger.error(f"❌ Failed to assign image: {e}")
         raise e
-
 
 @app.route('/profile-upload', methods=['POST'])
 def profile_upload():
-    file = request.files.get('file')
-    customer_id = request.form.get('customer_id')
-
-    if not file or not customer_id:
-        return jsonify({"success": False, "error": "Missing file or customer_id"}), 400
-
-    allowed_types = ['image/jpeg', 'image/png', 'image/webp']
-    if file.content_type not in allowed_types:
-        return jsonify({
-            "success": False,
-            "error": f"Invalid file type: {file.content_type}. Only JPG, PNG, and WebP are allowed."
-        }), 400
-
-    file.seek(0, os.SEEK_END)
-    file_size = file.tell()
-    file.seek(0)
-    if file_size > 5 * 1200 * 1200:
-        return jsonify({
-            "success": False,
-            "error": "File too large. Maximum allowed size is 5MB."
-        }), 400
-
-    filename = f"user_{customer_id}.webp"
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-
     try:
+        file = request.files.get('file')
+        customer_id = request.form.get('customer_id')
+
+        if not file or not customer_id:
+            return jsonify({"success": False, "error": "Missing file or customer_id"}), 400
+
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+        if file.content_type not in allowed_types:
+            return jsonify({
+                "success": False,
+                "error": f"Invalid file type: {file.content_type}. Only JPG, PNG, and WebP are allowed."
+            }), 400
+
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > 5 * 1024 * 1024:
+            return jsonify({
+                "success": False,
+                "error": "File too large. Maximum allowed size is 5MB."
+            }), 400
+
+        filename = f"user_{customer_id}.webp"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+
         img = Image.open(file.stream)
         img = img.convert("RGB")
         img = img.resize((500, 500), Image.LANCZOS)
         img.save(filepath, "WEBP", quality=90)
-    except Exception as e:
-        return jsonify({"success": False, "error": f"Image processing failed: {str(e)}"}), 500
 
-    try:
         url = assign_profile_image_to_customer(customer_id, filepath)
         return jsonify({"success": True, "url": url})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
+    except Exception as e:
+        app.logger.error(f"Error in profile_upload: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
