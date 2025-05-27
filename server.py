@@ -1,0 +1,112 @@
+from flask import Flask, request, jsonify
+import os
+import base64
+import requests
+from PIL import Image
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = Flask(__name__)
+UPLOAD_FOLDER = "profile_uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Shopify credentials
+SHOP_NAME = "sq1q6i-jm"
+ADMIN_API_TOKEN = os.getenv("SHOPIFY_ADMIN_API_TOKEN")
+API_VERSION = "2024-01"
+HEADERS = {
+    "Content-Type": "application/json",
+    "X-Shopify-Access-Token": ADMIN_API_TOKEN,
+}
+
+
+def assign_profile_image_to_customer(customer_id, image_path):
+    try:
+        with open(image_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode("utf-8")
+
+        upload_payload = {
+            "file": {
+                "attachment": encoded,
+                "filename": os.path.basename(image_path),
+                "mime_type": "image/webp"
+            }
+        }
+
+        upload_response = requests.post(
+            f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/files.json",
+            headers=HEADERS,
+            json=upload_payload
+        )
+        upload_response.raise_for_status()
+        uploaded_url = upload_response.json()["file"]["url"]
+
+        metafield_payload = {
+            "metafield": {
+                "namespace": "custom",
+                "key": "profile_image",
+                "type": "single_line_text_field",
+                "value": uploaded_url
+            }
+        }
+
+        metafield_response = requests.post(
+            f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/customers/{customer_id}/metafields.json",
+            headers=HEADERS,
+            json=metafield_payload
+        )
+        metafield_response.raise_for_status()
+        print(f"✅ Profile image assigned to customer {customer_id}")
+        return uploaded_url
+
+    except Exception as e:
+        print(f"❌ Failed to assign image: {e}")
+        raise e
+
+
+@app.route('/profile-upload', methods=['POST'])
+def profile_upload():
+    file = request.files.get('file')
+    customer_id = request.form.get('customer_id')
+
+    if not file or not customer_id:
+        return jsonify({"success": False, "error": "Missing file or customer_id"}), 400
+
+    allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+    if file.content_type not in allowed_types:
+        return jsonify({
+            "success": False,
+            "error": f"Invalid file type: {file.content_type}. Only JPG, PNG, and WebP are allowed."
+        }), 400
+
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+    if file_size > 5 * 1200 * 1200:
+        return jsonify({
+            "success": False,
+            "error": "File too large. Maximum allowed size is 5MB."
+        }), 400
+
+    filename = f"user_{customer_id}.webp"
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+    try:
+        img = Image.open(file.stream)
+        img = img.convert("RGB")
+        img = img.resize((500, 500), Image.LANCZOS)
+        img.save(filepath, "WEBP", quality=90)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Image processing failed: {str(e)}"}), 500
+
+    try:
+        url = assign_profile_image_to_customer(customer_id, filepath)
+        return jsonify({"success": True, "url": url})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
