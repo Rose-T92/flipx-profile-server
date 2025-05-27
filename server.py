@@ -29,7 +29,7 @@ def assign_profile_image_to_customer(customer_id, image_path):
             "file": {
                 "attachment": encoded,
                 "filename": os.path.basename(image_path),
-                "mime_type": "image/webp"
+                "content_type": "image/webp"  # <-- Fixed key here
             }
         }
 
@@ -63,6 +63,10 @@ def assign_profile_image_to_customer(customer_id, image_path):
         app.logger.error(f"❌ Failed to assign image: {e}")
         raise e
 
+@app.route('/')
+def index():
+    return jsonify({"message": "FlipXDeals Profile Upload Service is running."}), 200
+
 @app.route('/profile-upload', methods=['POST'])
 def profile_upload():
     try:
@@ -91,6 +95,7 @@ def profile_upload():
         filename = f"user_{customer_id}.webp"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
 
+        # Resize and convert to 500x500 webp
         img = Image.open(file.stream)
         img = img.convert("RGB")
         img = img.resize((500, 500), Image.LANCZOS)
