@@ -22,20 +22,24 @@ HEADERS = {
 
 def assign_profile_image_to_customer(customer_id, image_path):
     try:
+        # Remove base64 encoding and json; send multipart form-data with file binary content
         with open(image_path, "rb") as f:
             files = {
-                'file': (os.path.basename(image_path), f, 'image/webp')
+                "file": (os.path.basename(image_path), f, "image/webp")
             }
+
+            # Remove 'Content-Type' header because requests sets it for multipart automatically
             headers = {
-                "X-Shopify-Access-Token": ADMIN_API_TOKEN,
+                "X-Shopify-Access-Token": ADMIN_API_TOKEN
             }
+
             upload_response = requests.post(
                 f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/files.json",
                 headers=headers,
                 files=files
             )
-        upload_response.raise_for_status()
-        uploaded_url = upload_response.json()["file"]["url"]
+            upload_response.raise_for_status()
+            uploaded_url = upload_response.json()["file"]["url"]
 
         metafield_payload = {
             "metafield": {
@@ -50,7 +54,7 @@ def assign_profile_image_to_customer(customer_id, image_path):
             f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/customers/{customer_id}/metafields.json",
             headers={
                 "Content-Type": "application/json",
-                "X-Shopify-Access-Token": ADMIN_API_TOKEN,
+                "X-Shopify-Access-Token": ADMIN_API_TOKEN
             },
             json=metafield_payload
         )
@@ -61,6 +65,7 @@ def assign_profile_image_to_customer(customer_id, image_path):
     except Exception as e:
         app.logger.error(f"❌ Failed to assign image: {e}")
         raise e
+
 
 @app.route('/')
 def index():
