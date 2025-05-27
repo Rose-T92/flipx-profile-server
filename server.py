@@ -23,21 +23,17 @@ HEADERS = {
 def assign_profile_image_to_customer(customer_id, image_path):
     try:
         with open(image_path, "rb") as f:
-            encoded = base64.b64encode(f.read()).decode("utf-8")
-
-        upload_payload = {
-            "file": {
-                "attachment": encoded,
-                "filename": os.path.basename(image_path),
-                "content_type": "image/webp"  # <-- Fixed key here
+            files = {
+                'file': (os.path.basename(image_path), f, 'image/webp')
             }
-        }
-
-        upload_response = requests.post(
-            f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/files.json",
-            headers=HEADERS,
-            json=upload_payload
-        )
+            headers = {
+                "X-Shopify-Access-Token": ADMIN_API_TOKEN,
+            }
+            upload_response = requests.post(
+                f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/files.json",
+                headers=headers,
+                files=files
+            )
         upload_response.raise_for_status()
         uploaded_url = upload_response.json()["file"]["url"]
 
@@ -52,7 +48,10 @@ def assign_profile_image_to_customer(customer_id, image_path):
 
         metafield_response = requests.post(
             f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/customers/{customer_id}/metafields.json",
-            headers=HEADERS,
+            headers={
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": ADMIN_API_TOKEN,
+            },
             json=metafield_payload
         )
         metafield_response.raise_for_status()
